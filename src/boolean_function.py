@@ -1,4 +1,3 @@
-# src/boolean_function.py
 import itertools
 from typing import Iterator
 import numpy as np
@@ -9,14 +8,14 @@ class BooleanFunction:
     Represents an n-dimensional Boolean function f: {-1,+1}^n -> {-1,+1}.
     """
 
-    def __init__(self, n: int, outputs: np.ndarray = None):
+    def __init__(self, n: int, outputs: np.ndarray = None):  # type: ignore
         """
         Initialize a Boolean function.
         - n: number of inputs
         - outputs: array of length 2^n, with values in {-1, +1}
           If outputs is None, generate random outputs.
         """
-        if outputs is None:
+        if outputs is None:  # type: ignore
             outputs = np.random.choice([-1, 1], size=2**n)
         assert len(outputs) == 2**n, "Outputs must have length 2^n."
         self.n = n

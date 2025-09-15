@@ -1,8 +1,11 @@
 import numpy as np
-from boolean_function import BooleanFunction
 
 
 class Perceptron:
+    """
+    Simple perceptron with sign activation for Boolean function separability.
+    """
+
     def __init__(self, n_inputs: int, threshold: float = 0.0) -> None:
         self.n_inputs: int = n_inputs
         self.threshold: float = threshold
@@ -21,22 +24,19 @@ class Perceptron:
 
     def compute_b(self, x: np.ndarray) -> float:
         """Compute activation b = sum_j w_j * x_j - theta."""
-        return float(np.sum(self.weight_matrix * x) - self.threshold)
+        return float(np.dot(self.weight_matrix, x) - self.threshold)
 
     def train(
         self,
-        x: np.ndarray,
-        t: np.ndarray,
+        X: np.ndarray,
+        T: np.ndarray,
         eta: float = 0.05,
         max_epochs: int = 20,
     ) -> None:
+        """Train perceptron on dataset (delta rule)."""
         for _ in range(max_epochs):
-            for mu in range(x.shape[0]):
-                x_mu: np.ndarray = x[mu]
-                t_mu: int = t[mu]
-                o_mu: int = self.activation_function(
-                    np.dot(self.weight_matrix, x_mu) - self.threshold
-                )
+            for x_mu, t_mu in zip(X, T):
+                o_mu = self.activation_function(self.compute_b(x_mu))
                 error: int = t_mu - o_mu
                 if error != 0:
                     self.weight_matrix += eta * error * x_mu
@@ -47,58 +47,18 @@ class Perceptron:
         b: float = self.compute_b(x)
         return self.activation_function(b)
 
+    def predict_all(self, X: np.ndarray) -> np.ndarray:
+        """Predict for all input patterns."""
+        return np.array([self.predict(x) for x in X])
 
-def is_linearly_separable(
-    X: np.ndarray,
-    T: np.ndarray,
-    n_inputs: int,
-    eta: float = 0.05,
-    max_epochs: int = 20,
-) -> bool:
-    p: Perceptron = Perceptron(n_inputs=n_inputs)
-    p.train(X, T, eta=eta, max_epochs=max_epochs)
-    predictions: np.ndarray = np.array([p.predict(xi) for xi in X])
-    return np.array_equal(predictions, T)
-
-
-def estimate_fraction(n: int, num_samples: int) -> float:
-    count_separable: int = 0
-    for _ in range(num_samples):
-        bf: BooleanFunction = BooleanFunction.random(n)
-        X: np.ndarray = bf.X
-        T: np.ndarray = bf.Y
-        if is_linearly_separable(X, T, n):
-            count_separable += 1
-    return count_separable / num_samples
-
-
-def sample_unique_linearly_separable(n: int, num_samples: int) -> int:
-    seen = set()  # type: ignore
-    count_separable = 0
-    unique_boolean_funcs = 0
-    for _ in range(num_samples):
-        bf = BooleanFunction.random(n)
-        # Use the outputs as a tuple for uniqueness
-        key = (tuple(map(tuple, bf.X)), tuple(bf.Y))
-        if key in seen:
-            continue  # Skip duplicates
-        unique_boolean_funcs += 1
-
-        seen.add(key)  # type: ignore
-        X = bf.X
-        T = bf.Y
-        if is_linearly_separable(X, T, n):
-            count_separable += 1
-    return count_separable
-
-
-# for n in range(2, 6):
-#     frac: float = estimate_fraction(n, num_samples=1000)
-#     print(f"n={n}: fraction linearly separable ≈ {frac:.4f}")
-
-for n in range(2, 6):
-    num_samples = 10000
-    num_separable = sample_unique_linearly_separable(n, num_samples)
-    print(
-        f"n={n}: unique linearly separable Boolean functions found: {num_separable} out of {num_samples}"
-    )
+    @staticmethod
+    def is_linearly_separable(
+        X: np.ndarray,
+        T: np.ndarray,
+        eta: float = 0.05,
+        max_epochs: int = 20,
+    ) -> bool:
+        """Check if dataset (X, T) is linearly separable with a perceptron."""
+        p = Perceptron(n_inputs=X.shape[1])
+        p.train(X, T, eta=eta, max_epochs=max_epochs)
+        return np.array_equal(p.predict_all(X), T)
