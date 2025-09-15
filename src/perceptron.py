@@ -33,7 +33,15 @@ class Perceptron:
         eta: float = 0.05,
         max_epochs: int = 20,
     ) -> None:
-        """Train perceptron on dataset (delta rule)."""
+        """Train perceptron on dataset, updates the weights.
+
+        Args:
+            X (np.ndarray): The input values
+            T (np.ndarray): The target values
+            eta (float, optional): Learning rate. Defaults to 0.05.
+            max_epochs (int, optional): Number of training epochs. Defaults to 20.
+        """
+
         for _ in range(max_epochs):
             for x_mu, t_mu in zip(X, T):
                 # sgn(w*x - theta)
@@ -59,7 +67,18 @@ class Perceptron:
         eta: float = 0.05,
         max_epochs: int = 20,
     ) -> bool:
-        """Check if dataset (X, T) is linearly separable with a perceptron."""
+        """Check if dataset (X, T) is linearly separable with a perceptron.
+
+
+        Args:
+            X (np.ndarray): The input values
+            T (np.ndarray): The target values
+            eta (float, optional): Learning rate.. Defaults to 0.05.
+            max_epochs (int, optional): Number of training epochs. Defaults to 20.
+
+        Returns:
+            bool: Linearly seperable or not.
+        """
         p = Perceptron(n_inputs=X.shape[1])
         p.train(X, T, eta=eta, max_epochs=max_epochs)
         return np.array_equal(p.predict_all(X), T)

@@ -1,4 +1,4 @@
-from src.sampler import BooleanFunctionSampler
+from sampler import BooleanFunctionSampler
 
 if __name__ == "__main__":
     NUM_SAMPLES = 10000

@@ -1,6 +1,6 @@
 from typing import Set, Tuple
-from src.boolean_function import BooleanFunction
-from src.perceptron import Perceptron
+from boolean_function import BooleanFunction
+from perceptron import Perceptron
 
 
 class BooleanFunctionSampler:
