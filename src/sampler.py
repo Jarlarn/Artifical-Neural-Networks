@@ -14,7 +14,7 @@ class BooleanFunctionSampler:
 
     def sample_unique(self, num_samples: int) -> float:
         """Sample unique Boolean functions and return fraction linearly separable."""
-        count_separable = 0
+        seperable_functions = 0
         unique_funcs = 0
 
         for _ in range(num_samples):
@@ -26,6 +26,6 @@ class BooleanFunctionSampler:
             unique_funcs += 1
 
             if Perceptron.is_linearly_separable(bf.X, bf.Y):
-                count_separable += 1
+                seperable_functions += 1
 
-        return count_separable / unique_funcs if unique_funcs > 0 else 0.0
+        return seperable_functions / unique_funcs if unique_funcs > 0 else 0.0

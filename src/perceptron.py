@@ -3,7 +3,7 @@ import numpy as np
 
 class Perceptron:
     """
-    Simple perceptron with sign activation for Boolean function separability.
+    Perceptron with sign activation for Boolean function separability.
     """
 
     def __init__(self, n_inputs: int, threshold: float = 0.0) -> None:
@@ -36,6 +36,7 @@ class Perceptron:
         """Train perceptron on dataset (delta rule)."""
         for _ in range(max_epochs):
             for x_mu, t_mu in zip(X, T):
+                # sgn(w*x - theta)
                 o_mu = self.activation_function(self.compute_b(x_mu))
                 error: int = t_mu - o_mu
                 if error != 0:
