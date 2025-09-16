@@ -23,10 +23,12 @@ class BooleanFunction:
 
     def _generate_all_inputs(self) -> np.ndarray:
         """Generate all input vectors of length n in {-1,+1}^n."""
-        return np.array(list(itertools.product([-1, 1], repeat=self.n)))
+        grid = np.array(np.meshgrid(*[[-1, 1]] * self.n)).T.reshape(-1, self.n)
+        return grid
 
     @classmethod
     def random(cls, n: int) -> "BooleanFunction":
         """Generate a random Boolean function."""
-        outputs = np.random.choice([-1, 1], size=2**n)
+        rng = np.random.default_rng()
+        outputs = rng.choice([-1, 1], size=2**n)
         return cls(n, outputs)
