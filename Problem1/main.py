@@ -1,5 +1,4 @@
 from sampler import BooleanFunctionSampler
-from boolean_function import BooleanFunction
 if __name__ == "__main__":
     NUM_SAMPLES = 10000
     for n in range(2, 6):
