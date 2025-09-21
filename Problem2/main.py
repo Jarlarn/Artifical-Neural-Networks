@@ -1,4 +1,3 @@
-# --- Hopfield Network Functions ---
 from typing import List, Optional
 import numpy as np
 from data import x1, x2, x3, x4, x5, x_input1, x_input2, x_input3
@@ -15,12 +14,12 @@ class HopfieldNetwork:
         return np.array(matrix).flatten()
 
     def _compute_weight_matrix(self) -> np.ndarray:
-        W: np.ndarray = np.zeros((self.n, self.n))
+        weight_matrix: np.ndarray = np.zeros((self.n, self.n))
         for p in self.patterns:
-            W += np.outer(p, p)
-        W /= len(self.patterns)
-        np.fill_diagonal(W, 0)
-        return W
+            weight_matrix += np.outer(p, p)
+        weight_matrix /= len(self.patterns)
+        np.fill_diagonal(weight_matrix, 0)
+        return weight_matrix
 
     @staticmethod
     def signum(x: float) -> int:
@@ -61,14 +60,14 @@ class HopfieldNetwork:
 
 
 if __name__ == "__main__":
-    patterns = [
+    data_patterns = [
         HopfieldNetwork.flatten_pattern(x1),
         HopfieldNetwork.flatten_pattern(x2),
         HopfieldNetwork.flatten_pattern(x3),
         HopfieldNetwork.flatten_pattern(x4),
         HopfieldNetwork.flatten_pattern(x5),
     ]
-    network = HopfieldNetwork(patterns)
+    network = HopfieldNetwork(data_patterns)
     network.run(x_input1)
     network.run(x_input2)
     network.run(x_input3)
