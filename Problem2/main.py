@@ -1,53 +1,44 @@
 # --- Hopfield Network Functions ---
+from typing import List, Any
 import numpy as np
-from data import x1, x2, x3, x4, x5
+from data import x1, x2, x3, x4, x5, x_input1, x_input2, x_input3
 
-def flatten_pattern(matrix):
-    """Flatten a 2D pattern matrix to a 1D vector using typewriter scheme."""
+
+def flatten_pattern(matrix: List[List[int]]) -> np.ndarray:
     return np.array(matrix).flatten()
 
-def hebb_weight_matrix(patterns):
-    """
-    Compute weight matrix using Hebb's rule for a list of patterns.
-    Diagonal weights are set to zero.
-    patterns: list of numpy arrays (each pattern is a 1D array of -1/1)
-    Returns: weight matrix (numpy array)
-    """
-    patterns = np.array(patterns)
-    n = patterns.shape[1]
-    W = np.zeros((n, n))
+
+def hebb_weight_matrix(patterns: List[np.ndarray]) -> np.ndarray:
+    patterns = np.array(patterns)  # type:ignore
+    n: int = patterns.shape[1]  # type:ignore
+    W: np.ndarray = np.zeros((n, n))  # type:ignore
     for p in patterns:
-        W += np.outer(p, p)
-    W /= len(patterns)
+        W += np.outer(p, p)  # type:ignore
+    W /= len(patterns)  # type:ignore
     np.fill_diagonal(W, 0)
     return W
 
-def signum(x):
+
+def signum(x: float) -> int:
     return 1 if x >= 0 else -1
 
-def hopfield_async_update(W, s, max_iter=100):
-    """
-    Asynchronous deterministic update in typewriter order.
-    W: weight matrix
-    s: initial state vector
-    Returns: final state vector
-    """
-    n = len(s)
+
+def hopfield_async_update(
+    W: np.ndarray, s: np.ndarray, max_iter: int = 100
+) -> np.ndarray:
+    n: int = len(s)
     s = s.copy()
     for _ in range(max_iter):
-        prev = s.copy()
+        prev: np.ndarray = s.copy()
         for i in range(n):
-            h = np.dot(W[i], s)
+            h: float = np.dot(W[i], s)
             s[i] = signum(h)
         if np.array_equal(s, prev):
             break
     return s
 
-def pattern_index(final, patterns):
-    """
-    Classify the final pattern according to the scheme.
-    Returns: index (mu), -mu (inverted), or 6 (other)
-    """
+
+def pattern_index(final: np.ndarray, patterns: List[np.ndarray]) -> int:
     for idx, p in enumerate(patterns, 1):
         if np.array_equal(final, p):
             return idx
@@ -55,37 +46,24 @@ def pattern_index(final, patterns):
             return -idx
     return 6
 
-# --- Prepare patterns ---
-patterns = [flatten_pattern(x1), flatten_pattern(x2), flatten_pattern(x3), flatten_pattern(x4), flatten_pattern(x5)]
-W = hebb_weight_matrix(patterns)
 
-# --- Example: Feed a test pattern ---
+patterns: List[np.ndarray] = [
+    flatten_pattern(x1),
+    flatten_pattern(x2),
+    flatten_pattern(x3),
+    flatten_pattern(x4),
+    flatten_pattern(x5),
+]
+W: np.ndarray = hebb_weight_matrix(patterns)
+
 if __name__ == "__main__":
-    # Feed the provided pattern
-    input_pattern = [
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 1, 1, -1, -1, -1, -1, 1, 1, 1],
-        [-1, -1, 1, 1, 1, 1, 1, 1, -1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, 1, 1, 1, -1, -1, 1, 1, 1, -1],
-        [-1, -1, 1, 1, 1, 1, 1, 1, -1, -1],
-        [-1, -1, -1, 1, 1, 1, 1, -1, -1, -1],
-        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
-    ]
-    test_pattern = flatten_pattern(input_pattern)
-    result = hopfield_async_update(W, test_pattern)
-    idx = pattern_index(result, patterns)
+    input_pattern: Any = x_input3
+    test_pattern: np.ndarray = flatten_pattern(input_pattern)
+    result: np.ndarray = hopfield_async_update(W, test_pattern)
+    idx: int = pattern_index(result, patterns)
     print("Converged to pattern index:", idx)
     print("Steady state pattern in input format:")
-    output_matrix = result.reshape(16, 10).tolist()
+    output_matrix: List[List[int]] = result.reshape(16, 10).tolist()
     print("[")
     for i, row in enumerate(output_matrix):
         print("  [" + ", ".join(str(v) for v in row) + "]" + ("," if i < 15 else ""))
