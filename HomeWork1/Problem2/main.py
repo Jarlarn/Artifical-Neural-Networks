@@ -1,3 +1,4 @@
+# This code has been written thanks to documentation on numpy, stackoverflow, course book and AI.
 from typing import List, Optional
 import numpy as np
 from data import x1, x2, x3, x4, x5, x_input1, x_input2, x_input3
