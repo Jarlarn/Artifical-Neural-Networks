@@ -1,0 +1,8 @@
+M=1: KL_exact=0.694595 KL_sample=0.693320 best_cfg=(5, 0.02) theory_bound=0.693147
+  Sampled frequencies: {(np.int64(-1), np.int64(-1), np.int64(-1)): 0.11625, (np.int64(1), np.int64(-1), np.int64(1)): 0.1190625, (np.int64(-1), np.int64(1), np.int64(1)): 0.125625, (np.int64(1), np.int64(1), np.int64(-1)): 0.1403125}
+M=2: KL_exact=0.695122 KL_sample=0.662833 best_cfg=(1, 0.02) theory_bound=0.346574
+  Sampled frequencies: {(np.int64(-1), np.int64(-1), np.int64(-1)): 0.125625, (np.int64(1), np.int64(-1), np.int64(1)): 0.1175, (np.int64(-1), np.int64(1), np.int64(1)): 0.149375, (np.int64(1), np.int64(1), np.int64(-1)): 0.125}
+M=4: KL_exact=0.695742 KL_sample=0.673994 best_cfg=(5, 0.02) theory_bound=0.000000
+  Sampled frequencies: {(np.int64(-1), np.int64(-1), np.int64(-1)): 0.128125, (np.int64(1), np.int64(-1), np.int64(1)): 0.1159375, (np.int64(-1), np.int64(1), np.int64(1)): 0.1234375, (np.int64(1), np.int64(1), np.int64(-1)): 0.14375}
+M=8: KL_exact=0.083878 KL_sample=0.108333 best_cfg=(1, 0.02) theory_bound=0.000000
+  Sampled frequencies: {(np.int64(-1), np.int64(-1), np.int64(-1)): 0.4271875, (np.int64(1), np.int64(-1), np.int64(1)): 0.1925, (np.int64(-1), np.int64(1), np.int64(1)): 0.1975, (np.int64(1), np.int64(1), np.int64(-1)): 0.1559375}
