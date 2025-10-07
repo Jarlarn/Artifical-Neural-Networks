@@ -160,6 +160,69 @@ class RBMPlusMinus:
         return collected_samples
 
 
+# ==== Added helper functions for post‑training dynamics & frequency estimation ====
+
+
+def gibbs_sample_visible(rbm: RBMPlusMinus, v0, steps=1):
+    """
+    Perform 'steps' full Gibbs updates starting from visible vector v0 (shape (n_visible,))
+    Returns the final visible sample.
+    """
+    v = np.array(v0, dtype=int)
+    for _ in range(steps):
+        h = rbm.sample_hidden(v[None, :])[0]
+        v = rbm.sample_visible(h[None, :])[0]
+    return v
+
+
+def sample_visible_frequencies(
+    rbm: RBMPlusMinus,
+    total_samples=3000,
+    burn_in=3000,
+    thinning=5,
+    init_visible=None,
+    restrict_to_data=False,
+):
+    """
+    Run a single Gibbs chain and collect empirical frequencies of visible patterns.
+
+    total_samples: number of kept (recorded) samples AFTER burn-in & thinning.
+    burn_in: number of initial Gibbs steps to discard.
+    thinning: record every 'thinning'-th step after burn-in.
+    init_visible: optional starting visible vector; random if None.
+    restrict_to_data: if True, only count patterns in original data distribution.
+
+    Returns (freqs_dict, raw_counts_counter)
+    """
+    if init_visible is None:
+        v = rbm.rng.choice([-1, 1], size=rbm.cfg.n_visible)
+    else:
+        v = np.array(init_visible, dtype=int)
+
+    data_keys = set(get_data_distribution().keys())
+    counts = Counter()
+    kept = 0
+    t = 0
+    # We don't know needed total raw steps a priori; loop until enough kept samples.
+    while kept < total_samples:
+        # One Gibbs step (visible -> hidden -> visible)
+        h = rbm.sample_hidden(v[None, :])[0]
+        v = rbm.sample_visible(h[None, :])[0]
+        t += 1
+        if t < burn_in:
+            continue
+        if (t - burn_in) % thinning != 0:
+            continue
+        key = tuple(v.tolist())
+        if restrict_to_data and key not in data_keys:
+            continue
+        counts[key] += 1
+        kept += 1
+
+    freqs = {k: counts[k] / kept for k in counts}
+    return freqs, counts
+
+
 def kl_divergence(p_dist, q_dist, eps=1e-12):
     total = 0.0
     for state, p_val in p_dist.items():
@@ -227,7 +290,6 @@ def run_experiment(
         best = (float("inf"), None, None)
         for k_steps in ks:
             for learning_rate in lrs:
-                # Use a random seed each time (cfg.seed=None) unless caller specifies otherwise
                 cfg = RBMConfig(
                     3,
                     num_hidden,
@@ -296,5 +358,31 @@ def run_experiment(
         print("  Sampled frequencies:", sampled_dist)
 
 
+# ==== Optional standalone demo of frequency sampling after training one RBM ====
+def demo_frequency_sampling():
+    data = np.array(list(get_data_distribution().keys()), dtype=int)
+    cfg = RBMConfig(n_visible=3, n_hidden=4, lr=0.05, k=2, seed=42)
+    rbm = RBMPlusMinus(cfg)
+    rbm.train(data, epochs=4000, verbose_every=2000)
+
+    freqs, counts = sample_visible_frequencies(
+        rbm,
+        total_samples=2000,
+        burn_in=2500,
+        thinning=5,
+        restrict_to_data=False,
+    )
+    print("\nEmpirical frequencies (sampled chain):")
+    for pat in sorted(freqs.keys()):
+        print(pat, f"{freqs[pat]:.4f}", "count=", counts[pat])
+
+    exact = rbm.exact_visible_distribution()
+    print("\nExact model distribution:")
+    for pat in sorted(exact.keys()):
+        print(pat, f"{exact[pat]:.4f}")
+
+
 if __name__ == "__main__":
-    run_experiment()
+    # run_experiment()
+    # Uncomment to run the demo after the experiment:
+    demo_frequency_sampling()
