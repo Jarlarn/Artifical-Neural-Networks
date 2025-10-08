@@ -1,179 +1,147 @@
 import numpy as np
 
 
-# Tested!
-def intitialize_boltzmann(M: int):
-    # Intialize weights: first index hidden, second index visible
-    w = np.random.normal(0.0, 0.5, (M, 3))
-
-    # Intitialize thresholds
-    theta_v = np.zeros(3)
-    theta_h = np.zeros(M)
-
-    return w, theta_v, theta_h
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
 
-# Tested!
-def sample_data_distribution(data, p_0: int):
-    indices = np.random.randint(4, size=p_0)
-    return data[indices, :]
+def xor_patterns():
+    pats = np.array([[-1, -1, -1], [-1, 1, 1], [1, -1, 1], [1, 1, -1]], dtype=int)
+    probs = np.full(4, 0.25)
+    return pats, probs
 
 
-# Tested!
-def update_hidden(V, M, w, theta_h, beta):
-    B_h = np.matmul(w, V) - theta_h
-    p_B_h = (1 + np.exp(-2 * beta * B_h)) ** (-1)
-    random_values = np.random.rand(M)
-
-    return np.where(random_values < p_B_h, 1, -1)
-
-
-# Tested!
-def update_visible(H, w, theta_v, beta):
-    B_v = np.matmul(H, w) - theta_v
-    p_B_v = (1 + np.exp(-2 * beta * B_v)) ** (-1)
-    random_values = np.random.rand(3)
-
-    return np.where(random_values < p_B_v, 1, -1)
-
-
-# Tested!
-def compute_deltas(eta, V_0, V_k, w, theta_h, beta):
-    B_h_0 = np.matmul(w, V_0) - theta_h
-    E_h_0 = np.tanh(beta * B_h_0)
-
-    B_h_k = np.matmul(w, V_k) - theta_h
-    E_h_k = np.tanh(beta * B_h_k)
-
-    delta_w = eta * (np.outer(E_h_0, V_0) - np.outer(E_h_k, V_k))
-
-    delta_theta_v = -eta * (V_0 - V_k)
-    delta_theta_h = -eta * (E_h_0 - E_h_k)
-
-    return delta_w, delta_theta_v, delta_theta_h
-
-
-def kl_divergence(w, theta_v, theta_h, beta):
-    all_patterns = np.array(
-        [
-            [-1, -1, -1],
-            [1, -1, 1],
-            [-1, 1, 1],
-            [1, 1, -1],
-            [-1, 1, -1],
-            [-1, -1, 1],
-            [1, -1, -1],
-            [1, 1, 1],
-        ]
+def enumerate_visible_states():
+    return np.array(
+        [[(1 if (i >> b) & 1 else -1) for b in range(3)] for i in range(8)], dtype=int
     )
 
-    unnormalized_log_probs = np.zeros(all_patterns.shape[0])
 
-    for i, V in enumerate(all_patterns):
-        V_term = np.dot(theta_v, V)
+class RBM:
+    def __init__(self, n_visible, n_hidden, seed=0, scale=0.1):
+        rng = np.random.default_rng(seed)
+        self.rng = rng
+        self.n_visible = n_visible
+        self.n_hidden = n_hidden
+        self.W = rng.normal(0, scale, (n_visible, n_hidden))
+        self.a = np.zeros(n_visible)
+        self.b = np.zeros(n_hidden)
 
-        B_h = np.matmul(w, V) - theta_h
-        H_term = np.sum(np.log(2 * np.cosh(beta * B_h)))
+    # P(h_j=+1|v) = σ(2(b_j + Σ_i v_i W_ij))
+    def sample_h(self, v):
+        act = 2 * (self.b + v @ self.W)
+        p = sigmoid(act)
+        h = np.where(self.rng.random(p.shape) < p, 1, -1)
+        return h, p
 
-        unnormalized_log_probs[i] = beta * V_term + H_term
+    # P(v_i=+1|h) = σ(2(a_i + Σ_j W_ij h_j))
+    def sample_v(self, h):
+        act = 2 * (self.a + h @ self.W.T)
+        p = sigmoid(act)
+        v = np.where(self.rng.random(p.shape) < p, 1, -1)
+        return v, p
 
-    max_log_prob = np.max(unnormalized_log_probs)
-    log_Z = max_log_prob + np.log(np.sum(np.exp(unnormalized_log_probs - max_log_prob)))
+    # Exact unnormalized P(v)
+    def unnormalized_pv(self, V):
+        linear = V @ self.a
+        hidden_terms = np.prod(2 * np.cosh(self.b + V @ self.W), axis=1)
+        return np.exp(linear) * hidden_terms
 
-    log_model_probs = unnormalized_log_probs - log_Z
-    model_probs = np.exp(log_model_probs)
-
-    data_probs = np.array([0.25, 0.25, 0.25, 0.25])
-    log_data_probs = np.log(data_probs)
-
-    kl_div = np.sum(data_probs * (log_data_probs - log_model_probs[:4]))
-
-    return kl_div, model_probs
-
-
-def kl_divergence_simulation(w, theta_v, theta_h, beta, n_samples=10000, k_gibbs=100):
-    all_patterns = np.array(
-        [
-            [-1, -1, -1],
-            [1, -1, 1],
-            [-1, 1, 1],
-            [1, 1, -1],
-            [-1, 1, -1],
-            [-1, -1, 1],
-            [1, -1, -1],
-            [1, 1, 1],
-        ]
-    )
-    V = np.random.choice([-1, 1], 3)
-
-    M = w.shape[0]
-    for _ in range(k_gibbs):
-        H = update_hidden(V, M, w, theta_h, beta)
-        V = update_visible(H, w, theta_v, beta)
-
-    samples = []
-    for _ in range(n_samples):
-        H = update_hidden(V, M, w, theta_h, beta)
-        V = update_visible(H, w, theta_v, beta)
-        samples.append(V.copy())
-
-    counts = np.zeros(4)
-    for sample in samples:
-        for i, pattern in enumerate(all_patterns[:4]):
-            if np.array_equal(sample, pattern):
-                counts[i] += 1
-                break
-
-    model_probs = counts / n_samples
-    eps = 1e-10
-    model_probs = np.maximum(model_probs, eps)
-
-    data_probs = np.array([0.25, 0.25, 0.25, 0.25])
-    kl_div = np.sum(data_probs * (np.log(data_probs) - np.log(model_probs[:4])))
-
-    return kl_div, model_probs
+    def exact_visible_distribution(self):
+        V = enumerate_visible_states()
+        u = self.unnormalized_pv(V)
+        P = u / u.sum()
+        return V, P
 
 
-# Tested!
-def main(M, k, beta, eta, nu_max, p_0):
-    data = np.array([[-1, -1, -1], [1, -1, 1], [-1, 1, 1], [1, 1, -1]])
-    print(data.shape)
-
-    w, theta_v, theta_h = intitialize_boltzmann(M)
-
-    for nu in range(nu_max):
-        print(f"nu: {nu}")
-        sample = sample_data_distribution(data, p_0)
-
-        delta_w = np.zeros((M, 3))
-        delta_theta_v = np.zeros(3)
-        delta_theta_h = np.zeros(M)
-
-        for mu in range(sample.shape[0]):
-            V = sample[mu, :]
-
-            H = update_hidden(V, M, w, theta_h, beta)
-
-            for t in range(k):
-                V = update_visible(H, w, theta_v, beta)
-                H = update_hidden(V, M, w, theta_h, beta)
-
-            cur_delta_w, cur_delta_theta_v, cur_delta_theta_h = compute_deltas(
-                eta, sample[mu, :], V, w, theta_h, beta
-            )
-            delta_w += cur_delta_w
-            delta_theta_v += cur_delta_theta_v
-            delta_theta_h += cur_delta_theta_h
-
-        w += delta_w
-        theta_v += delta_theta_v
-        theta_h += delta_theta_h
-
-    kl_div, _ = kl_divergence_simulation(w, theta_v, theta_h, beta)
-    print(f"sim kl div: {kl_div}")
+def kl_divergence(p_target_dict, p_model_dict, eps=1e-12):
+    kl = 0.0
+    for k, pt in p_target_dict.items():
+        pm = max(p_model_dict.get(k, 0.0), eps)
+        kl += pt * (np.log(pt + eps) - np.log(pm))
+    return kl
 
 
-# main(M = 1, k = 3, beta = 0.4, eta = 0.01, nu_max = 50000, p_0 = 4)
-main(M=2, k=3, beta=0.4, eta=0.01, nu_max=50000, p_0=4)
-# main(M = 4, k = 5, beta = 0.4, eta = 0.005, nu_max = 50000, p_0 = 4)
-# main(M = 8, k = 5, beta = 0.4, eta = 0.005, nu_max = 20000, p_0 = 4)
+def dict_from(V, P):
+    return {tuple(v.tolist()): float(p) for v, p in zip(V, P)}
+
+
+def step_by_step_demo(epochs=5, k=1, lr=0.05):
+    print("=== RBM XOR DEBUG DEMO ===")
+    data, data_probs = xor_patterns()
+    rbm = RBM(n_visible=3, n_hidden=2, seed=123)
+
+    print("Initial W:\n", rbm.W)
+    print("Initial a:", rbm.a)
+    print("Initial b:", rbm.b)
+    print()
+
+    for epoch in range(1, epochs + 1):
+        # Single full-batch CD-k (batch = all four XOR patterns)
+        batch = data
+        m = batch.shape[0]
+
+        # Positive phase
+        h0, ph0 = rbm.sample_h(batch)  # sampled h0 and probs
+        Eh0 = 2 * ph0 - 1  # expectations for ±1 units
+        pos_W_sample = batch.T @ h0 / m
+        pos_W_expect = batch.T @ Eh0 / m  # lower variance version
+        pos_a = batch.mean(axis=0)
+        pos_b_sample = h0.mean(axis=0)
+        pos_b_expect = Eh0.mean(axis=0)
+
+        # Gibbs chain k steps (starting from data)
+        v_neg = batch.copy()
+        h_neg = h0.copy()
+        for _ in range(k):
+            v_neg, _ = rbm.sample_v(h_neg)
+            h_neg, ph_neg = rbm.sample_h(v_neg)
+        Eh_neg = 2 * ph_neg - 1
+
+        neg_W_sample = v_neg.T @ h_neg / m
+        neg_W_expect = v_neg.T @ Eh_neg / m
+        neg_a = v_neg.mean(axis=0)
+        neg_b_sample = h_neg.mean(axis=0)
+        neg_b_expect = Eh_neg.mean(axis=0)
+
+        # Choose expectation-based update (comment to use sampled)
+        dW = pos_W_expect - neg_W_expect
+        da = pos_a - neg_a
+        db = pos_b_expect - neg_b_expect
+
+        rbm.W += lr * dW
+        rbm.a += lr * da
+        rbm.b += lr * db
+
+        print(f"--- Epoch {epoch} ---")
+        print("Batch (data) v:\n", batch)
+        print("Positive phase hidden probs ph0:\n", ph0)
+        print("Positive phase Eh0:\n", Eh0)
+        print("Negative sample v_neg:\n", v_neg)
+        print("Negative phase hidden probs ph_neg:\n", ph_neg)
+        print("Eh_neg:\n", Eh_neg)
+        print("pos_W (expect):\n", pos_W_expect)
+        print("neg_W (expect):\n", neg_W_expect)
+        print("dW:\n", dW)
+        print("da:", da, " db:", db)
+        print("Updated W:\n", rbm.W)
+        print("Updated a:", rbm.a)
+        print("Updated b:", rbm.b)
+
+        # Exact model distribution after update
+        V_all, P_all = rbm.exact_visible_distribution()
+        model_dict = dict_from(V_all, P_all)
+        target_dict = dict_from(*xor_patterns())
+        kl = kl_divergence(target_dict, model_dict)
+        print("Exact P(v):")
+        for v_row, p in zip(V_all, P_all):
+            mark = "*" if tuple(v_row.tolist()) in target_dict else " "
+            print(f"  {tuple(v_row)} : {p:.5f}{mark}")
+        print(f"KL(target || model) = {kl:.6f}")
+        print()
+
+    print("Demo complete.")
+
+
+if __name__ == "__main__":
+    step_by_step_demo(epochs=5, k=1, lr=0.05)

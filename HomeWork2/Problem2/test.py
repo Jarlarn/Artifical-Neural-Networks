@@ -7,17 +7,20 @@ from dataclasses import dataclass
 # Patterns (v1,v2,v3) with v3 = XOR(v1,v2) under mapping 0->-1, 1->+1:
 # (-1,-1,-1), (-1,+1,+1), (+1,-1,+1), (+1,+1,-1)
 def xor_patterns():
-    pats = np.array([[-1, -1, -1], [-1, +1, +1], [+1, -1, +1], [+1, +1, -1]], dtype=int)
-    probs = np.full(len(pats), 1 / 4.0)
-    return pats, probs
+    xor_visible_patterns = np.array(
+        [[-1, -1, -1], [-1, +1, +1], [+1, -1, +1], [+1, +1, -1]], dtype=int
+    )
+    xor_target_probabilities = np.full(len(xor_visible_patterns), 1 / 4.0)
+    return xor_visible_patterns, xor_target_probabilities
 
 
 def enumerate_visible_states():
     # All 8 patterns of 3 ±1 bits
-    vs = np.array(
-        [[(1 if (i >> b) & 1 else -1) for b in range(3)] for i in range(8)], dtype=int
+    all_visible_states = np.array(
+        [[(1 if (i >> bit) & 1 else -1) for bit in range(3)] for i in range(8)],
+        dtype=int,
     )
-    return vs
+    return all_visible_states
 
 
 def sigmoid(x):
@@ -30,135 +33,159 @@ class RBM:
     n_hidden: int
     rng: np.random.Generator
 
+    # yes
     def __post_init__(self):
-        scale = 0.1
-        self.W = self.rng.normal(0, scale, (self.n_visible, self.n_hidden))
-        self.a = np.zeros(self.n_visible)  # visible biases
-        self.b = np.zeros(self.n_hidden)  # hidden biases
+        weight_init_scale = 0.1
+        self.weights = self.rng.normal(
+            0, weight_init_scale, (self.n_visible, self.n_hidden)
+        )
+        self.visible_threshold = np.zeros(self.n_visible)
+        self.hidden_threshold = np.zeros(self.n_hidden)
 
-    # For ±1 units: P(h_j=+1|v) = sigmoid(2(b_j + W_j^T v))
-    def sample_h(self, v):
-        act = 2 * (self.b + v @ self.W)
-        p = sigmoid(act)
-        h = np.where(self.rng.random(p.shape) < p, 1, -1)
-        return h, p
+    # yes
+    def sample_hidden(self, visible_batch):
+        field_hidden = visible_batch @ self.weights - self.hidden_threshold
+        prob_hidden = sigmoid(2 * field_hidden)
+        hidden_sample = np.where(
+            self.rng.random(prob_hidden.shape) < prob_hidden, 1, -1
+        )
+        return hidden_sample, prob_hidden
 
-    # P(v_i=+1|h) = sigmoid(2(a_i + W_i·h))
-    def sample_v(self, h):
-        # Supports h shape (n_hidden,) or (batch, n_hidden)
-        act = 2 * (
-            self.a + h @ self.W.T
-        )  # FIX: was self.W @ h (dimension error for batches)
-        p = sigmoid(act)
-        v = np.where(self.rng.random(p.shape) < p, 1, -1)
-        return v, p
+    # yes
+    def sample_visible(self, hidden_batch):
+        field_visible = hidden_batch @ self.weights.T - self.visible_threshold
+        prob_visible = sigmoid(2 * field_visible)
+        visible_sample = np.where(
+            self.rng.random(prob_visible.shape) < prob_visible, 1, -1
+        )
+        return visible_sample, prob_visible
 
-    def cd_k(self, data, k=1, lr=0.05, batch_size=16):
-        n = data.shape[0]
-        idx = self.rng.permutation(n)
-        for start in range(0, n, batch_size):
-            batch = data[idx[start : start + batch_size]]
-            # Positive phase
-            h0, ph0 = self.sample_h(batch)
-            pos_W = batch.T @ h0
-            pos_a = batch.sum(axis=0)
-            pos_b = h0.sum(axis=0)
-            # Gibbs chain
-            v = batch
-            h = h0
+    def cd_k(self, training_data, k=1, learning_rate=0.05, batch_size=16):
+        n_samples = training_data.shape[0]
+        shuffled = self.rng.permutation(n_samples)
+        for start in range(0, n_samples, batch_size):
+            v0 = training_data[shuffled[start : start + batch_size]]
+
+            # Positive phase (data)
+            h0_sample, h0_prob = self.sample_hidden(v0)
+            pos_W = v0.T @ h0_sample
+            pos_v_theta = v0.sum(axis=0)
+            pos_h_theta = h0_sample.sum(axis=0)
+
+            # Gibbs chain k steps
+            v_chain = v0
+            h_chain = h0_sample
             for _ in range(k):
-                v, _ = self.sample_v(h)
-                h, _ = self.sample_h(v)
-            neg_W = v.T @ h
-            neg_a = v.sum(axis=0)
-            neg_b = h.sum(axis=0)
-            m = batch.shape[0]
-            self.W += lr * (pos_W - neg_W) / m
-            self.a += lr * (pos_a - neg_a) / m
-            self.b += lr * (pos_b - neg_b) / m
+                v_chain, _ = self.sample_visible(h_chain)
+                h_chain, _ = self.sample_hidden(v_chain)
 
-    # Exact unnormalized probability: exp(a^T v) * Π_j 2 cosh(b_j + W_j^T v)
-    def unnormalized_pv(self, V):
-        # V: (N, n_visible)
-        linear = V @ self.a
-        hidden_terms = np.prod(2 * np.cosh(self.b + V @ self.W), axis=1)
-        return np.exp(linear) * hidden_terms
+            # Negative phase (model)
+            neg_W = v_chain.T @ h_chain
+            neg_v_theta = v_chain.sum(axis=0)
+            neg_h_theta = h_chain.sum(axis=0)
+
+            m = v0.shape[0]
+            self.weights += learning_rate * (pos_W - neg_W) / m
+            # For thresholds θ we subtract gradient that previously added to bias (bias = -θ)
+            self.visible_threshold -= learning_rate * (pos_v_theta - neg_v_theta) / m
+            self.hidden_threshold -= learning_rate * (pos_h_theta - neg_h_theta) / m
+
+    # Unnormalized P(v) = exp(-θ^(v)·v) * Π_j 2 cosh( (v W)_j - θ_j^(h) )
+    def unnormalized_visible_prob(self, visible_states):
+        field_hidden = visible_states @ self.weights - self.hidden_threshold
+        hidden_terms = np.prod(2 * np.cosh(field_hidden), axis=1)
+        linear_term = -(visible_states @ self.visible_threshold)
+        return np.exp(linear_term) * hidden_terms
 
     def model_distribution_exact(self):
-        V = enumerate_visible_states()
-        unnorm = self.unnormalized_pv(V)
-        Z = unnorm.sum()
-        return V, unnorm / Z
+        all_visible_states = enumerate_visible_states()
+        unnormalized = self.unnormalized_visible_prob(all_visible_states)
+        partition_function = unnormalized.sum()
+        return all_visible_states, unnormalized / partition_function
 
     def gibbs_chain_visible(self, steps=50000, burn_in=5000, thin=10):
-        # Start random
-        v = self.rng.choice([-1, 1], size=self.n_visible)
-        counts = {}
-        total = 0
+        current_visible = self.rng.choice([-1, 1], size=self.n_visible)
+        occurrence_counts = {}
+        total_kept = 0
         for t in range(steps):
-            h, _ = self.sample_h(v)
-            v, _ = self.sample_v(h)
+            current_hidden, _ = self.sample_hidden(current_visible)
+            current_visible, _ = self.sample_visible(current_hidden)
             if t >= burn_in and (t - burn_in) % thin == 0:
-                key = tuple(v.tolist())
-                counts[key] = counts.get(key, 0) + 1
-                total += 1
-        V = enumerate_visible_states()
-        p = np.zeros(len(V))
-        mapping = {tuple(v.tolist()): i for i, v in enumerate(V)}
-        for k, c in counts.items():
-            p[mapping[k]] = c / total
-        return V, p
+                key = tuple(current_visible.tolist())
+                occurrence_counts[key] = occurrence_counts.get(key, 0) + 1
+                total_kept += 1
+        all_visible_states = enumerate_visible_states()
+        empirical_probabilities = np.zeros(len(all_visible_states))
+        index_lookup = {
+            tuple(state.tolist()): i for i, state in enumerate(all_visible_states)
+        }
+        for pattern_key, count in occurrence_counts.items():
+            empirical_probabilities[index_lookup[pattern_key]] = count / total_kept
+        return all_visible_states, empirical_probabilities
 
 
-def kl_divergence(p_data_dict, p_model_dict, eps=1e-12):
-    kl = 0.0
-    for v, pd in p_data_dict.items():
-        pm = max(p_model_dict.get(v, 0.0), eps)
-        kl += pd * (np.log(pd + eps) - np.log(pm))
-    return kl
+def kl_divergence(target_prob_dict, model_prob_dict, eps=1e-12):
+    divergence = 0.0
+    for state_key, target_prob in target_prob_dict.items():
+        model_prob = max(model_prob_dict.get(state_key, 0.0), eps)
+        divergence += target_prob * (np.log(target_prob + eps) - np.log(model_prob))
+    return divergence
 
 
-def dict_from(V, P):
-    return {tuple(v.tolist()): float(p) for v, p in zip(V, P)}
+def dict_from(visible_states, probabilities):
+    return {
+        tuple(state.tolist()): float(p)
+        for state, p in zip(visible_states, probabilities)
+    }
 
 
 def train_and_evaluate(
-    hidden_list=(1, 2, 4, 8), epochs=2000, lr=0.05, k=1, seed=0, eval_chain_steps=200000
+    hidden_unit_list=(1, 2, 4, 8),
+    epochs=2000,
+    learning_rate=0.05,
+    k=1,
+    seed=0,
+    eval_chain_steps=200000,
 ):
     rng = np.random.default_rng(seed)
-    data_pats, _ = xor_patterns()
-    dataset = np.repeat(data_pats, 25, axis=0)  # 100 samples (25 of each)
-    target_V, target_P = (
-        xor_patterns()
-    )  # FIX: simpler & clearer than lambda indirection
-    target_dict = dict_from(target_V, target_P)
+    xor_data_patterns, _ = xor_patterns()
+    training_dataset = np.repeat(xor_data_patterns, 25, axis=0)
+    target_states, target_probs = xor_patterns()
+    target_prob_dict = dict_from(target_states, target_probs)
     results = []
-    for M in hidden_list:
-        rbm = RBM(3, M, rng)
-        for e in range(epochs):
-            rbm.cd_k(dataset, k=k, lr=lr, batch_size=16)
-        # Empirical (chain)
-        V_chain, P_chain = rbm.gibbs_chain_visible(steps=eval_chain_steps)
-        chain_dict = dict_from(V_chain, P_chain)
+    for n_hidden_units in hidden_unit_list:
+        rbm = RBM(3, n_hidden_units, rng)
+        for _ in range(epochs):
+            rbm.cd_k(training_dataset, k=k, learning_rate=learning_rate, batch_size=16)
+        # Empirical (sampling)
+        sampled_states, sampled_probs = rbm.gibbs_chain_visible(steps=eval_chain_steps)
+        sampled_prob_dict = dict_from(sampled_states, sampled_probs)
         # Exact
-        V_exact, P_exact = rbm.model_distribution_exact()
-        exact_dict = dict_from(V_exact, P_exact)
-        kl_chain = kl_divergence(target_dict, chain_dict)
-        kl_exact = kl_divergence(target_dict, exact_dict)
+        exact_states, exact_probs = rbm.model_distribution_exact()
+        exact_prob_dict = dict_from(exact_states, exact_probs)
+        kl_sampling = kl_divergence(target_prob_dict, sampled_prob_dict)
+        kl_exact = kl_divergence(target_prob_dict, exact_prob_dict)
         results.append(
-            {"M": M, "KL_chain": kl_chain, "KL_exact": kl_exact, "P_exact": exact_dict}
+            {
+                "M": n_hidden_units,
+                "KL_chain": kl_sampling,
+                "KL_exact": kl_exact,
+                "P_exact": exact_prob_dict,
+            }
         )
-        print(f"M={M:2d}  KL(chain)={kl_chain:.5f}  KL(exact)={kl_exact:.5f}")
+        print(
+            f"M={n_hidden_units:2d}  KL(chain)={kl_sampling:.5f}  KL(exact)={kl_exact:.5f}"
+        )
     return results
 
 
 def plot_results(results, outfile="results.png"):
-    Ms = [r["M"] for r in results]
-    kl_chain = [r["KL_chain"] for r in results]
-    kl_exact = [r["KL_exact"] for r in results]
+    hidden_sizes = [r["M"] for r in results]
+    kl_chain_values = [r["KL_chain"] for r in results]
+    kl_exact_values = [r["KL_exact"] for r in results]
     plt.figure(figsize=(5, 3))
-    plt.plot(Ms, kl_chain, "o-", label="KL (Gibbs estimate)")
-    plt.plot(Ms, kl_exact, "s--", label="KL (exact)")
+    plt.plot(hidden_sizes, kl_chain_values, "o-", label="KL (Gibbs estimate)")
+    plt.plot(hidden_sizes, kl_exact_values, "s--", label="KL (exact)")
     plt.xlabel("Number of hidden units M")
     plt.ylabel("KL divergence")
     plt.title("RBM on XOR distribution")
@@ -170,26 +197,25 @@ def plot_results(results, outfile="results.png"):
 
 
 def print_best_table(results):
-    xor_pats, xor_probs = xor_patterns()
-    target = {tuple(p): pr for p, pr in zip(xor_pats, xor_probs)}
-    best = min(results, key=lambda r: r["KL_exact"])
-    print(f"\nBest model: M={best['M']}  KL_exact={best['KL_exact']:.6f}")
+    xor_states, xor_target_probs = xor_patterns()
+    target_prob_map = {tuple(s): p for s, p in zip(xor_states, xor_target_probs)}
+    best_result = min(results, key=lambda r: r["KL_exact"])
+    print(f"\nBest model: M={best_result['M']}  KL_exact={best_result['KL_exact']:.6f}")
     print("Pattern        Target   Model    AbsDiff")
     print("-----------------------------------------")
-    for pat in enumerate_visible_states():
-        key = tuple(pat.tolist())
-        tprob = target.get(key, 0.0)
-        mprob = best["P_exact"].get(key, 0.0)
-        print(f"{key}  {tprob:7.4f}  {mprob:7.4f}  {abs(tprob-mprob):7.4f}")
+    for state in enumerate_visible_states():
+        key = tuple(state.tolist())
+        target_p = target_prob_map.get(key, 0.0)
+        model_p = best_result["P_exact"].get(key, 0.0)
+        print(f"{key}  {target_p:7.4f}  {model_p:7.4f}  {abs(target_p-model_p):7.4f}")
 
 
 if __name__ == "__main__":
-    # Hyperparameters (tune as needed)
     results = train_and_evaluate(
-        hidden_list=(1, 2, 4, 8),
-        epochs=10000,  # increase for better fit
-        lr=0.02,
-        k=5,  # try k=1,2,5
+        hidden_unit_list=(1, 2, 4, 8),
+        epochs=20000,
+        learning_rate=0.01,
+        k=5,
         seed=42,
         eval_chain_steps=100000,
     )
