@@ -17,11 +17,10 @@ class Data:
 # Discrete-time Reservoir Network
 # -------------------------------
 class ReservoirNetwork:
-    def __init__(self, Ni, Nr, spectral_radius=0.9, seed=None) -> None:
+    def __init__(self, Ni, Nr, seed=None) -> None:
         """
         Ni : number of input dimensions
         Nr : number of reservoir neurons
-        spectral_radius : scaling factor for reservoir weights
         """
         self.Ni = Ni
         self.Nr = Nr
@@ -29,26 +28,21 @@ class ReservoirNetwork:
         self.input_weights = None
         self.reservoir_weights = None
         self.output_weights = None
-        self._init_weights(spectral_radius, seed)
+        self._init_weights(seed)
 
-    def _init_weights(self, spectral_radius, seed=None):
+    def _init_weights(self, seed=None):
         if seed is not None:
             np.random.seed(seed)
 
-        # Input weight variance
         variance_in = 0.002
         self.input_weights = np.random.normal(
             0.0, np.sqrt(variance_in), size=(self.Nr, self.Ni)
         )
 
-        # Random reservoir weights
         variance_reservoir = 1.0 / self.Nr
-        W = np.random.normal(0.0, np.sqrt(variance_reservoir), size=(self.Nr, self.Nr))
-
-        # Scale to achieve desired spectral radius
-        eigvals = np.linalg.eigvals(W)
-        rho = np.max(np.abs(eigvals))
-        self.reservoir_weights = W * (spectral_radius / rho)
+        self.reservoir_weights = np.random.normal(
+            0.0, np.sqrt(variance_reservoir), size=(self.Nr, self.Nr)
+        )
 
     def update_reservoir(self, xk):
         """
@@ -109,7 +103,7 @@ if __name__ == "__main__":
     data = Data("training-set.csv")
 
     # 2. Initialize reservoir
-    network = ReservoirNetwork(Ni=3, Nr=500, spectral_radius=0.9, seed=3211)
+    network = ReservoirNetwork(Ni=3, Nr=500, seed=3211)
 
     # 3. Run training data through the reservoir
     reservoir_states = []
