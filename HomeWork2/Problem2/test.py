@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
 
-# Target XOR distribution over 3 visible ±1 bits:
-# Patterns (v1,v2,v3) with v3 = XOR(v1,v2) under mapping 0->-1, 1->+1:
-# (-1,-1,-1), (-1,+1,+1), (+1,-1,+1), (+1,+1,-1)
 def xor_patterns():
     xor_visible_patterns = np.array(
         [[-1, -1, -1], [-1, +1, +1], [+1, -1, +1], [+1, +1, -1]], dtype=int
@@ -15,7 +12,6 @@ def xor_patterns():
 
 
 def enumerate_visible_states():
-    # All 8 patterns of 3 ±1 bits
     all_visible_states = np.array(
         [[(1 if (i >> bit) & 1 else -1) for bit in range(3)] for i in range(8)],
         dtype=int,
@@ -33,7 +29,6 @@ class RBM:
     n_hidden: int
     rng: np.random.Generator
 
-    # yes
     def __post_init__(self):
         weight_init_scale = 0.1
         self.weights = self.rng.normal(
@@ -42,7 +37,6 @@ class RBM:
         self.visible_threshold = np.zeros(self.n_visible)
         self.hidden_threshold = np.zeros(self.n_hidden)
 
-    # yes
     def sample_hidden(self, visible_batch):
         field_hidden = visible_batch @ self.weights - self.hidden_threshold
         prob_hidden = sigmoid(2 * field_hidden)
@@ -51,7 +45,6 @@ class RBM:
         )
         return hidden_sample, prob_hidden
 
-    # yes
     def sample_visible(self, hidden_batch):
         field_visible = hidden_batch @ self.weights.T - self.visible_threshold
         prob_visible = sigmoid(2 * field_visible)
@@ -66,31 +59,26 @@ class RBM:
         for start in range(0, n_samples, batch_size):
             v0 = training_data[shuffled[start : start + batch_size]]
 
-            # Positive phase (data)
             h0_sample, h0_prob = self.sample_hidden(v0)
             pos_W = v0.T @ h0_sample
             pos_v_theta = v0.sum(axis=0)
             pos_h_theta = h0_sample.sum(axis=0)
 
-            # Gibbs chain k steps
             v_chain = v0
             h_chain = h0_sample
             for _ in range(k):
                 v_chain, _ = self.sample_visible(h_chain)
                 h_chain, _ = self.sample_hidden(v_chain)
 
-            # Negative phase (model)
             neg_W = v_chain.T @ h_chain
             neg_v_theta = v_chain.sum(axis=0)
             neg_h_theta = h_chain.sum(axis=0)
 
             m = v0.shape[0]
             self.weights += learning_rate * (pos_W - neg_W) / m
-            # For thresholds θ we subtract gradient that previously added to bias (bias = -θ)
             self.visible_threshold -= learning_rate * (pos_v_theta - neg_v_theta) / m
             self.hidden_threshold -= learning_rate * (pos_h_theta - neg_h_theta) / m
 
-    # Unnormalized P(v) = exp(-θ^(v)·v) * Π_j 2 cosh( (v W)_j - θ_j^(h) )
     def unnormalized_visible_prob(self, visible_states):
         field_hidden = visible_states @ self.weights - self.hidden_threshold
         hidden_terms = np.prod(2 * np.cosh(field_hidden), axis=1)
@@ -157,10 +145,10 @@ def train_and_evaluate(
         rbm = RBM(3, n_hidden_units, rng)
         for _ in range(epochs):
             rbm.cd_k(training_dataset, k=k, learning_rate=learning_rate, batch_size=16)
-        # Empirical (sampling)
+
         sampled_states, sampled_probs = rbm.gibbs_chain_visible(steps=eval_chain_steps)
         sampled_prob_dict = dict_from(sampled_states, sampled_probs)
-        # Exact
+
         exact_states, exact_probs = rbm.model_distribution_exact()
         exact_prob_dict = dict_from(exact_states, exact_probs)
         kl_sampling = kl_divergence(target_prob_dict, sampled_prob_dict)
@@ -213,11 +201,11 @@ def print_best_table(results):
 if __name__ == "__main__":
     results = train_and_evaluate(
         hidden_unit_list=(1, 2, 4, 8),
-        epochs=20000,
+        epochs=4000,
         learning_rate=0.01,
         k=5,
         seed=42,
-        eval_chain_steps=100000,
+        eval_chain_steps=200000,
     )
     plot_results(results)
     print_best_table(results)
